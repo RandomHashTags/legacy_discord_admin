@@ -1,4 +1,4 @@
-package me.randomHashTags.DiscordAdmin;
+package me.randomhashtags.discordadmin;
 
 import net.dv8tion.jda.core.AccountType;
 import net.dv8tion.jda.core.JDA;
@@ -10,8 +10,6 @@ import net.dv8tion.jda.core.hooks.ListenerAdapter;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class DiscordAdmin extends ListenerAdapter {
 
@@ -24,7 +22,14 @@ public class DiscordAdmin extends ListenerAdapter {
         }
     }
 
-    private final String resourcelist = "\n\n**Resource List**\n__Minecraft Plugins__\n- RandomPackage, RandomSky, RandomPrisons, Merchants\n- CosmicVaults, CombatElite, RandomOrbsorber\n- RandomArmorSwitch, FatBuckets\n- UMaterial, UParticle, USound\n\n__iOS Apps__\n- Hopscotch Dash";
+    private final String resourcelist = "\n\n**Resource List**\n__Minecraft Plugins__\n- RandomPackage, RandomSky, RandomPrisons, RandomMCMMO\n- Merchants, CosmicVaults, CombatElite, RandomOrbsorber\n- RandomArmorSwitch, FatBuckets\n- UMaterial, UParticle, USound\n\n__iOS Apps__\n- Hopscotch Dash";
+    public void addDevNote(Guild g, String addition) {
+        final TextChannel C = g.getTextChannelsByName("\uD83D\uDCC5-dev-notes", false).get(0);
+        C.sendMessage(addition).queue();
+    }
+    public String getCurrentDate() {
+        return new SimpleDateFormat("MMMM dd, yyyy, 'at' HH:mm:ss z").format(new Date(System.currentTimeMillis()));
+    }
     public void onMessageReceived(MessageReceivedEvent event) {
         final User u = event.getAuthor();
         final MessageChannel c = event.getChannel();
@@ -35,44 +40,26 @@ public class DiscordAdmin extends ListenerAdapter {
         if(!u.isBot() && c instanceof TextChannel) {
             final TextChannel tc = (TextChannel) c, target = g.getTextChannelById(id);
             final Category parent = tc.getParent();
-            final String topic = tc.getTopic(), targetName = target.getName();
-            if(parent != null && parent.getName().equals("\uD83C\uDFA8 Resources \uD83C\uDFA8") && ch.equals("\uD83D\uDCE2updates") && msg.contains("**Version**")) {
-                final List<Role> mentioned = message.getMentionedRoles();
-                if(!mentioned.isEmpty()) {
-                    final String r = mentioned.get(0).getName();
-                    final List<TextChannel> list = g.getCategoriesByName("Fixed for next update", false).get(0).getTextChannels();
-                    for(TextChannel tx : list) {
-                        if(r.equals(tx.getTopic())) {
-                            final iTextChannel it = iTextChannel.valueOf(tx);
-                            if(it != null) it.delete();
-                            else tx.delete().queue();
-                        }
-                    }
-                }
-            } else if(msg.startsWith("-giveaway") && u.getName().equals("RandomHashTags") && u.getDiscriminator().equals("1948")) {
-                final String type = msg.split("-giveaway")[1];
-                message.delete().queue();
-                final long delay = 2;
-                final TimeUnit unit = TimeUnit.DAYS;
-                final String date = new SimpleDateFormat("MMMM dd, yyyy, 'at' HH:mm:ss z").format(new Date(System.currentTimeMillis()+unit.toMillis(delay)));
-
-                new Giveaway(u, type, c, "@everyone\n\n**Giveaway**\n " + type + "\n\n**React with \uD83C\uDF89 to enter!**\n\n`Ends on " + date + "`", delay, unit);
-            } else if(g.getMember(u).getPermissions().contains(Permission.ADMINISTRATOR) && (targetName.startsWith("bug") || targetName.startsWith("suggestion") || targetName.startsWith("role") || topic != null)) {
+            final String targetName = target.getName(), parentName = parent != null ? parent.getName() : null;
+            if(g.getMember(u).getPermissions().contains(Permission.ADMINISTRATOR) && g.getRolesByName(targetName, true) != null && (parentName != null && (parentName.equals("Bugs") || parentName.equals("Suggestions") || parentName.equals("Role Requests")))) {
+                final boolean bug = parentName.equals("Bugs"), suggestion = parentName.equals("Suggestions");
                 if(msg.equals("-close")) {
-                    final iTextChannel i = iTextChannel.valueOf(target);
-                    if(i != null)
-                        i.delete();
-                    else
-                        target.delete().reason("Resolved").queue();
-                } else if(msg.equals("-fixed")) {
+                    target.delete().reason("Resolved").queue();
+                } else if(msg.startsWith("-fixed ") && bug || msg.startsWith("-added ") && suggestion) {
                     final iTextChannel i = iTextChannel.valueOf(tc);
                     if(i != null) {
-                        i.fixed(message);
+                        final String r = g.getRolesByName(ch, true).get(0).getName(), d = getCurrentDate(), m = i.creatorMention;
+                        if(bug) {
+                            addDevNote(g, "_(" + d + ")_\n\n**" + r + " Bug Fixed**\n" + msg.split("-fixed ")[1] + "\n\nReporter " + m);
+                        } else {
+                            addDevNote(g, "_(" + d + ")_\n\n**" + r + " Suggestion Added**\n" + msg.split("-added ")[1] + "\n\nRequester " + m);
+                        }
+                        i.delete();
                     }
                 }
-            } else if(ch.equals("\uD83D\uDCACsupport")) {
+            } else if(ch.equals("\uD83D\uDCAC-discussion") || ch.equals("\uD83D\uDC96-supporters") || ch.equals("✨\uD83C\uDF31-random") || ch.equals("\uD83C\uDFEA\uD83D\uDC31\uD83D\uDD10-other")) {
                 final String m = msg.toLowerCase().replace(" ", "").replaceAll("\\p{P}", "");
-                if(m.contains("bug") && !msg.startsWith("-bug") || m.contains("error") || m.contains("doesnt w") || m.contains("doesnt d") || m.contains("dont w") || m.contains("dont d") || m.contains("fix") || m.contains("notwork") || m.contains("aintwork") || m.contains("broke")) {
+                if(m.contains("bug") && !msg.startsWith("-bug") || m.contains("error") || m.contains("doesntw") || m.contains("doesntd") || m.contains("dontw") || m.contains("dontd") || m.contains("fix") || m.contains("notwork") || m.contains("aintwork") || m.contains("broke")) {
                     sendMention(tc, u, "If you think you've found a bug/error, report it using \"-bug [resource]\"" + resourcelist);
                 }
             }
@@ -88,12 +75,9 @@ public class DiscordAdmin extends ListenerAdapter {
                         String lang = A;
                         lang = lang.startsWith("c") ? "C/C++/C# Developer"
                                 : lang.equals("python") ? "Python Developer"
-                                : lang.equals("javascript") ? "JavaScript Developer"
                                 : lang.equals("java") ? "Java Developer"
                                 : lang.equals("ruby") ? "Ruby Developer"
-                                : lang.equals("assembly") ? "Assembly Developer"
                                 : lang.equals("mobile") ? "Mobile Developer"
-                                : lang.equals("dart") ? "Dart Developer"
                                 : lang.equals("spigotmc java") ? "SpigotMC Java Developer"
                                 : lang.equals("spigotmc skript") ? "SpigotMC Skript Developer"
 
@@ -115,6 +99,7 @@ public class DiscordAdmin extends ListenerAdapter {
                         && !A.equals("randompackage")
                         && !A.equals("randomsky")
                         && !A.equals("randomprisons")
+                        && !A.equals("randommcmmo")
                         && !A.equals("merchants")
                         && !A.equals("randomorbsorber")
                         && !A.equals("randomarmorswitch")
@@ -131,6 +116,7 @@ public class DiscordAdmin extends ListenerAdapter {
                     plugin = plugin.equals("randompackage") ? "RandomPackage"
                             : plugin.equals("randomsky") ? "RandomSky"
                             : plugin.equals("randomprisons") ? "RandomPrisons"
+                            : plugin.equals("randommcmmo") ? "RandomMCMMO"
                             : plugin.equals("merchants") ? "Merchants"
                             : plugin.equals("randomorbsorber") ? "RandomOrbsorber"
                             : plugin.equals("randomarmorswitch") ? "RandomArmorSwitch"
@@ -149,7 +135,7 @@ public class DiscordAdmin extends ListenerAdapter {
         if(!role) {
             sendMention(tc, u, "Correct usage: \"-" + T + " [resource]\"" + resourcelist);
         } else {
-            sendMention(tc, u, "Correct usage: \"-" + T + " [role]\"\n\n**Verified Roles**\n- RandomPackage, RandomPrisons, RandomSky, Merchants\n\n**Developer Roles**\n- Assembly, Python, Java, Ruby\n- Dart, C, C++, C#\n- JavaScript, Dart, Mobile\n- SpigotMC Java, SpigotMC Skript\n\n**Other Roles**\n- Content Creator, Graphic Designer, Music Artist, Influencer");
+            sendMention(tc, u, "Correct usage: \"-" + T + " [role]\"\n\n**Verified Roles**\n- RandomPackage, RandomPrisons, RandomSky, RandomMCMMO, Merchants\n\n**Developer Roles**\n- Python, Java, Ruby\n- C, C++, C#\n- Mobile, SpigotMC Java, SpigotMC Skript\n\n**Other Roles**\n- Content Creator, Graphic Designer, Music Artist, Influencer");
         }
     }
     private void sendMention(TextChannel tc, User user, String message) {
