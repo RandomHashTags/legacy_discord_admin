@@ -1,44 +1,38 @@
 package me.randomhashtags.discordadmin;
 
+import me.randomhashtags.discordadmin.util.Project;
+import me.randomhashtags.discordadmin.util.TicketType;
 import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.*;
 import net.dv8tion.jda.core.managers.ChannelManager;
 import net.dv8tion.jda.core.requests.restaction.ChannelAction;
 
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
-public class iTextChannel {
-    private static final List<iTextChannel> channels = new ArrayList<>();
-    public final User creator;
-    public final Guild guild;
-    public final Message msg;
-    public final String type, plugin, creatorMention;
+public final class iTextChannel {
+    private static final HashSet<iTextChannel> channels = new HashSet<>();
 
-    private final ChannelAction ca;
+    private final User creator;
+    private final Guild guild;
+    private final Message msg;
+    private final TicketType type;
+    private final String creatorMention;
+    private final Project project;
+
     private TextChannel channel;
-    private ChannelManager manager;
-    private Message msgPlayerChannel;
+    private Message canBeFoundAtMsg;
 
-    public iTextChannel(User creator, Guild guild, Message msg, String type, String plugin) {
+    public iTextChannel(User creator, Guild guild, Message msg, TicketType type, Project project) {
         this.creator = creator;
         this.creatorMention = creator.getAsMention();
         this.guild = guild;
         this.msg = msg;
         this.type = type;
-        this.plugin = plugin;
-        final String categoryName;
-        if(type.equals("bug")) {
-            categoryName = "Bugs";
-        } else if(type.equals("suggestion")) {
-            categoryName = "Suggestions";
-        } else {
-            categoryName = "Role Requests";
-        }
-        final Category category = guild.getCategoriesByName(categoryName, false).get(0);
-        ca = category.createTextChannel(plugin);
+        this.project = project;
+        final Category category = guild.getCategoriesByName(type.getChannelName(), false).get(0);
+        final ChannelAction ca = category.createTextChannel(project.name().replace("_", ""));
         ca.queue(this::createChannel);
         channels.add(this);
     }
@@ -46,47 +40,50 @@ public class iTextChannel {
     private void createChannel(Channel channel) {
         final TextChannel TC = (TextChannel) channel;
         this.channel = TC;
-        manager = TC.getManager();
+        final ChannelManager manager = TC.getManager();
         final Member m = guild.getMember(creator);
-        TC.createPermissionOverride(m).setAllow(Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY, Permission.MESSAGE_WRITE, Permission.MESSAGE_EMBED_LINKS, Permission.MESSAGE_ATTACH_FILES).queue();
-        TC.sendMessage("Dear " + creatorMention + ",\n\nThe developer has been contacted about your " + type + ".\nPlease send any relevant info about your " + type + " in this text channel.\n\nThanks, " + guild.getOwner().getAsMention()).queue();
-        sendMention(msg.getTextChannel(), creator, "Your " + type.substring(0, 1).toUpperCase() + type.substring(1).toLowerCase() + " " + (type.equals("bug") ? "Report" : "Request") + " for " + plugin + " can be found at " + TC.getAsMention());
-        manager.setTopic(TC.getCreationTime().toString()).queueAfter(1, TimeUnit.SECONDS);
-    }
+        final Permission[] perms = new Permission[] { Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY, Permission.MESSAGE_WRITE, Permission.MESSAGE_EMBED_LINKS, Permission.MESSAGE_ATTACH_FILES, Permission.MESSAGE_ADD_REACTION, Permission.MESSAGE_EXT_EMOJI };
+        TC.createPermissionOverride(m).setAllow(perms).queue();
 
-    public void fixed(Message msg) {
-        if(type.equals("bug")) {
-            fixed(msg.getTextChannel());
-            msg.delete().queue();
+        final List<Role> devRoles = guild.getRolesByName("Dev - " + TC.getName(), true);
+        final Role devRole = devRoles != null && !devRoles.isEmpty() ? devRoles.get(0) : null;
+        final boolean isDevRole = devRole != null;
+        final String mention = isDevRole ? devRole.getAsMention() : guild.getOwner().getAsMention();
+        if(isDevRole) {
+            TC.createPermissionOverride(devRole).setAllow(perms).queue();
         }
-    }
-    private void fixed(TextChannel t) {
-        t.sendMessage("Dear " + creatorMention + ",\n\nThis report has been fixed for next update!\n\n**Thanks for helping improve " + plugin + "!**\n\nChannel will delete upon next update for " + plugin + ".").queue();
-        manager.setParent(guild.getCategoriesByName("Fixed for next update", false).get(0)).queue();
-        msgPlayerChannel.delete().queue(didDelete());
-        final String role = plugin.equals("RandomPackage") || plugin.equals("RandomSky") || plugin.equals("Merchants") ? plugin : "SpigotMC Free Ping";
-        manager.setTopic(role).queueAfter(1, TimeUnit.SECONDS);
+        final String type = this.type.name();
+        TC.sendMessage("Dear " + creatorMention + ",\n\nThe developer(s) have been contacted about your " + type + ".\nPlease send any relevant info about your " + type + " in this text channel.\n\nThanks, " + mention).queue();
+        sendCanBeFoundAtMessage(msg.getTextChannel(), creator, "Your " + type + " for " + project + " can be found at " + TC.getAsMention());
+        manager.setTopic(TC.getCreationTime().toString()).queueAfter(1, TimeUnit.SECONDS);
     }
     public void delete() {
         channels.remove(this);
         channel.delete().reason("Resolved").queue();
-        if(msgPlayerChannel != null) msgPlayerChannel.delete().queue();
+        if(canBeFoundAtMsg != null) {
+            canBeFoundAtMsg.delete().queueAfter(1, TimeUnit.SECONDS);
+        }
     }
-    private Consumer<Void> didDelete() {
-        msgPlayerChannel = null;
-        return null;
-    }
-
-    public static iTextChannel valueOf(TextChannel channel) {
-        for(iTextChannel i : channels)
-            if(i.channel == channel)
-                return i;
-        return null;
-    }
-    private void sendMention(TextChannel tc, User user, String message) {
+    private void sendCanBeFoundAtMessage(TextChannel tc, User user, String message) {
         tc.sendMessage(user.getAsMention() + ", " + message).queue(this::did);
     }
     private void did(Message message) {
-        this.msgPlayerChannel = message;
+        canBeFoundAtMsg = message;
+    }
+
+    public TicketType getType() { return type; }
+    public Project getProject() { return project; }
+    public User getCreator() { return creator; }
+    public String getCreatorMention() { return creatorMention; }
+    public Guild getGuild() { return guild; }
+    public Message getMessage() { return msg; }
+
+    public static iTextChannel valueOf(TextChannel channel) {
+        for(iTextChannel i : channels) {
+            if(i.channel == channel) {
+                return i;
+            }
+        }
+        return null;
     }
 }
